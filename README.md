@@ -49,3 +49,20 @@ The current logic layer includes a few upgrades beyond basic priority sorting:
 - Task filtering by completion status and pet name.
 - Recurring task rollover for `daily` and `weekly` frequencies when tasks are completed.
 - Lightweight conflict detection that emits warnings when two tasks are set for the exact same time.
+
+## Testing PawPal+
+
+Run the test suite with:
+
+```bash
+python -m pytest
+```
+
+Current automated tests cover:
+- Task completion status updates.
+- Adding tasks to a pet.
+- Chronological sorting by task time.
+- Daily recurrence rollover after completion.
+- Exact-time conflict detection warnings.
+**Confidence Level**: 4/5 stars.
+Reasoning: The key scheduler behaviors and edge cases are passing in automated tests, but reliability could be improved further with more UI integration tests and additional overlap-based conflict scenarios.
