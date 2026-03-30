@@ -17,7 +17,7 @@ def _get_active_pet(owner: Owner, pet_id: str) -> Pet | None:
 
 
 def _init_session_state() -> None:
-    """Create core app objects once and keep them in the Streamlit session vault."""
+    """Initialize shared objects once per Streamlit session."""
     if "owner" not in st.session_state:
         st.session_state["owner"] = Owner(
             owner_id="owner-1",
@@ -41,6 +41,36 @@ def _next_task_id(owner: Owner) -> str:
     return f"task-{len(owner.list_all_tasks()) + 1}"
 
 
+def _pet_name_lookup(owner: Owner) -> dict[str, str]:
+    """Create a quick pet-id to pet-name lookup."""
+    return {pet.pet_id: pet.name for pet in owner.pets}
+
+
+def _task_rows(tasks: list[Task], owner: Owner) -> list[dict[str, str | int]]:
+    """Format tasks for clean table display."""
+    pet_names = _pet_name_lookup(owner)
+    return [
+        {
+            "time": task.time,
+            "title": task.title,
+            "pet": pet_names.get(task.pet_id, task.pet_id),
+            "duration_minutes": task.duration_minutes,
+            "priority": task.priority,
+            "frequency": task.frequency,
+            "status": task.status,
+        }
+        for task in tasks
+    ]
+
+
+def _show_conflict_warnings(warnings: list[str]) -> None:
+    """Render conflict warnings in one readable block."""
+    if not warnings:
+        return
+    warning_lines = "\n".join(f"- {warning}" for warning in warnings)
+    st.warning(f"Potential time conflicts found:\n{warning_lines}")
+
+
 _init_session_state()
 owner: Owner = st.session_state["owner"]
 active_pet = _get_active_pet(owner, st.session_state["active_pet_id"])
@@ -51,12 +81,8 @@ st.title("🐾 PawPal+")
 
 st.markdown(
     """
-Welcome to the PawPal+ starter app.
-
-This file is intentionally thin. It gives you a working Streamlit app so you can start quickly,
-but **it does not implement the project logic**. Your job is to design the system and build it.
-
-Use this app as your interactive demo once your backend classes/functions exist.
+Plan pet care tasks for the day.
+Add pets, add tasks, then generate a schedule.
 """
 )
 
@@ -95,7 +121,7 @@ available_minutes = st.number_input(
 if st.button("Save owner profile"):
     owner.name = owner_name
     owner.daily_time_available_minutes = int(available_minutes)
-    st.success("Owner profile saved in session state.")
+    st.success("Owner profile saved.")
 
 with st.form("add_pet_form", clear_on_submit=True):
     new_pet_name = st.text_input("New pet name")
@@ -134,7 +160,7 @@ else:
 st.markdown("### Tasks")
 st.caption("Add a task to the active pet.")
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5, col6 = st.columns(6)
 with col1:
     task_title = st.text_input("Task title", value="Morning walk")
 with col2:
@@ -147,11 +173,18 @@ with col4:
         ["walk", "feeding", "meds", "enrichment", "grooming", "other"],
         index=5,
     )
+with col5:
+    task_time = st.text_input("Time (HH:MM)", value="09:00")
+with col6:
+    frequency = st.selectbox("Frequency", ["once", "daily", "weekly"], index=0)
+
+task_due_date = st.date_input("Due date")
 
 if st.button("Add task to active pet"):
     if active_pet is None:
         st.error("No active pet found in session state.")
     else:
+        recurring = frequency in {"daily", "weekly"}
         active_pet.add_task(
             Task(
                 task_id=_next_task_id(owner),
@@ -160,26 +193,42 @@ if st.button("Add task to active pet"):
                 category=TaskCategory(category_label),
                 duration_minutes=int(duration),
                 priority=_priority_to_score(priority),
-                is_recurring=True,
-                frequency="daily",
+                time=task_time,
+                is_recurring=recurring,
+                frequency=frequency,
+                due_date=task_due_date,
             )
         )
         st.success(f"Task added to {active_pet.name}.")
 
-task_rows = []
-if active_pet is not None:
-    for task in active_pet.list_tasks():
-        task_rows.append(
-            {
-                "title": task.title,
-                "duration_minutes": task.duration_minutes,
-                "priority": task.priority,
-                "status": task.status,
-            }
-        )
+scheduler = Scheduler(owner=owner)
+all_tasks = scheduler.retrieve_all_tasks()
+
+st.markdown("### Task Explorer")
+filter_col1, filter_col2 = st.columns(2)
+with filter_col1:
+    pet_filter = st.selectbox(
+        "Filter by pet",
+        ["All pets"] + [pet.name for pet in owner.pets],
+        index=0,
+    )
+with filter_col2:
+    status_filter = st.selectbox("Filter by status", ["all", "pending", "completed"], index=0)
+
+filtered_tasks = scheduler.filter_tasks(
+    tasks=all_tasks,
+    status=None if status_filter == "all" else status_filter,
+    pet_name=None if pet_filter == "All pets" else pet_filter,
+)
+sorted_filtered_tasks = scheduler.sort_by_time(filtered_tasks)
+
+conflict_warnings = scheduler.detect_time_conflicts(sorted_filtered_tasks)
+_show_conflict_warnings(conflict_warnings)
+
+task_rows = _task_rows(sorted_filtered_tasks, owner)
 
 if task_rows:
-    st.write("Current tasks:")
+    st.success("Showing tasks in time order.")
     st.table(task_rows)
 else:
     st.info("No tasks yet. Add one above.")
@@ -209,6 +258,9 @@ if st.button("Generate schedule"):
     if summary["deferred_tasks"]:
         st.write("Deferred tasks")
         st.table(summary["deferred_tasks"])
+
+    if summary["warnings"]:
+        _show_conflict_warnings(summary["warnings"])
 
     st.write("Why this plan")
     st.text(summary["explanation"])
