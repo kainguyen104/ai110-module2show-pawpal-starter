@@ -41,3 +41,11 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+## Smarter Scheduling
+
+The current logic layer includes a few upgrades beyond basic priority sorting:
+- Time-aware sorting of tasks using `HH:MM` values.
+- Task filtering by completion status and pet name.
+- Recurring task rollover for `daily` and `weekly` frequencies when tasks are completed.
+- Lightweight conflict detection that emits warnings when two tasks are set for the exact same time.
