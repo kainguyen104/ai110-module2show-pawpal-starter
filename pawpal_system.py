@@ -240,6 +240,12 @@ class Scheduler:
 			return 24 * 60 + 1
 		return hours * 60 + minutes
 
+	def _minutes_to_hhmm(self, total_minutes: int) -> str:
+		"""Convert minute counts into HH:MM strings."""
+		hours = total_minutes // 60
+		minutes = total_minutes % 60
+		return f"{hours:02d}:{minutes:02d}"
+
 	def detect_time_conflicts(self, tasks: list[Task] | None = None) -> list[str]:
 		"""Return warning messages for tasks that share the exact same start time."""
 		source_tasks = tasks if tasks is not None else self.collect_due_tasks()
@@ -280,6 +286,62 @@ class Scheduler:
 				or pet_lookup.get(task.pet_id, "") == pet_name_normalized
 			)
 		]
+
+	def find_next_available_slot(
+		self,
+		duration_minutes: int,
+		window_start: str = "06:00",
+		window_end: str = "22:00",
+		tasks: list[Task] | None = None,
+		buffer_minutes: int = 0,
+	) -> str | None:
+		"""Return the earliest available HH:MM slot that can fit the requested duration."""
+		if duration_minutes <= 0:
+			raise ValueError("duration_minutes must be greater than 0")
+		if buffer_minutes < 0:
+			raise ValueError("buffer_minutes must be non-negative")
+
+		window_start_min = self._parse_time_to_minutes(window_start)
+		window_end_min = self._parse_time_to_minutes(window_end)
+		if window_start_min > 24 * 60 or window_end_min > 24 * 60:
+			return None
+		if window_start_min >= window_end_min:
+			return None
+
+		source_tasks = tasks if tasks is not None else self.collect_due_tasks()
+		occupied_intervals: list[tuple[int, int]] = []
+
+		for task in source_tasks:
+			start_min = self._parse_time_to_minutes(task.time)
+			if start_min > 24 * 60:
+				continue
+			task_duration = max(task.duration_minutes, 0)
+			end_min = start_min + task_duration
+
+			expanded_start = max(window_start_min, start_min - buffer_minutes)
+			expanded_end = min(window_end_min, end_min + buffer_minutes)
+			if expanded_end > expanded_start:
+				occupied_intervals.append((expanded_start, expanded_end))
+
+		occupied_intervals.sort(key=lambda interval: interval[0])
+		merged: list[tuple[int, int]] = []
+		for start_min, end_min in occupied_intervals:
+			if not merged or start_min > merged[-1][1]:
+				merged.append((start_min, end_min))
+			else:
+				last_start, last_end = merged[-1]
+				merged[-1] = (last_start, max(last_end, end_min))
+
+		candidate_start = window_start_min
+		for busy_start, busy_end in merged:
+			if busy_start - candidate_start >= duration_minutes:
+				return self._minutes_to_hhmm(candidate_start)
+			candidate_start = max(candidate_start, busy_end)
+
+		if window_end_min - candidate_start >= duration_minutes:
+			return self._minutes_to_hhmm(candidate_start)
+
+		return None
 
 	def build_plan(self) -> list[Task]:
 		"""Create the daily schedule based on time and priorities."""

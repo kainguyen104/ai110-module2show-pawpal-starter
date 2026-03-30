@@ -145,3 +145,92 @@ def test_conflict_detection_flags_duplicate_times() -> None:
 
     assert len(warnings) == 1
     assert "Time conflict at 08:15" in warnings[0]
+
+
+def test_next_available_slot_finds_earliest_gap() -> None:
+    owner = Owner(owner_id="owner-1", name="Jordan", daily_time_available_minutes=90)
+    pet = Pet(pet_id="pet-1", name="Mochi", species="dog", age=4)
+    owner.add_pet(pet)
+
+    pet.add_task(
+        Task(
+            task_id="task-1",
+            pet_id="pet-1",
+            title="Morning walk",
+            category=TaskCategory.WALK,
+            duration_minutes=30,
+            priority=3,
+            time="08:00",
+        )
+    )
+    pet.add_task(
+        Task(
+            task_id="task-2",
+            pet_id="pet-1",
+            title="Meds",
+            category=TaskCategory.MEDS,
+            duration_minutes=20,
+            priority=5,
+            time="09:10",
+        )
+    )
+
+    scheduler = Scheduler(owner=owner)
+    next_slot = scheduler.find_next_available_slot(
+        duration_minutes=30,
+        window_start="08:00",
+        window_end="11:00",
+        tasks=owner.list_all_tasks(),
+    )
+
+    assert next_slot == "08:30"
+
+
+def test_next_available_slot_returns_none_when_day_is_full() -> None:
+    owner = Owner(owner_id="owner-1", name="Jordan", daily_time_available_minutes=90)
+    pet = Pet(pet_id="pet-1", name="Mochi", species="dog", age=4)
+    owner.add_pet(pet)
+
+    pet.add_task(
+        Task(
+            task_id="task-1",
+            pet_id="pet-1",
+            title="Walk",
+            category=TaskCategory.WALK,
+            duration_minutes=30,
+            priority=3,
+            time="08:00",
+        )
+    )
+    pet.add_task(
+        Task(
+            task_id="task-2",
+            pet_id="pet-1",
+            title="Feeding",
+            category=TaskCategory.FEEDING,
+            duration_minutes=30,
+            priority=4,
+            time="08:30",
+        )
+    )
+    pet.add_task(
+        Task(
+            task_id="task-3",
+            pet_id="pet-1",
+            title="Enrichment",
+            category=TaskCategory.ENRICHMENT,
+            duration_minutes=30,
+            priority=2,
+            time="09:00",
+        )
+    )
+
+    scheduler = Scheduler(owner=owner)
+    next_slot = scheduler.find_next_available_slot(
+        duration_minutes=20,
+        window_start="08:00",
+        window_end="09:30",
+        tasks=owner.list_all_tasks(),
+    )
+
+    assert next_slot is None

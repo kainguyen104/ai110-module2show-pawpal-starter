@@ -23,9 +23,25 @@ The app implements the following core algorithms and behaviors:
 - Due-date and recurrence checks to collect tasks relevant for the current day
 - Conflict warnings when multiple tasks share the same exact start time
 - Daily/weekly recurrence rollover when a recurring task is completed
+- Next available slot finder that returns the earliest open `HH:MM` window for a new task duration
 - Time-budget scheduling that plans tasks until available owner minutes are exhausted
 - Planned vs deferred task summary generation
 - Human-readable explanation log describing why tasks were planned or deferred
+
+## Agent Mode: Advanced Algorithm Work
+
+For Challenge 1, Agent Mode was used to implement and validate an additional algorithmic capability beyond the base requirements.
+
+- Capability added: `find_next_available_slot(...)` in `Scheduler`
+- Purpose: compute the earliest open time slot for a proposed task inside a planning window
+- Inputs: task duration, start/end window, existing tasks, optional transition buffer
+- Output: earliest valid `HH:MM` slot or `None` when no feasible slot exists
+
+How Agent Mode helped:
+
+- Broke the feature into clear steps: parse times, build occupied intervals, merge overlaps, scan for earliest feasible gap.
+- Produced edge-case handling for invalid time strings and full-day schedules.
+- Guided test design so behavior is verified by automated tests rather than assumptions.
 
 ## App Workflow
 
@@ -78,6 +94,8 @@ Current tests validate:
 - Chronological sorting correctness
 - Daily recurrence rollover behavior
 - Exact-time conflict warning detection
+- Earliest available slot detection for a new task
+- No-availability behavior when the planning window is fully occupied
 
 ## 📸 Demo
 
